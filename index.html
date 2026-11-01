@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Ngủ bù thời gian thực</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#141a3a;--ink:#f4efe6;--soft:#b9c3ff;--panel:rgba(20,26,58,.72);--line:rgba(185,195,255,.28);--accent:#ffd27a;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:"Quicksand",system-ui,sans-serif;overflow:hidden}
+canvas{display:block}
+#intro,#loader{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;z-index:20;background:radial-gradient(ellipse at 50% 40%,#2b2f6b,var(--bg) 70%)}
+#intro{cursor:default;padding:1.2rem}
+#intro h1{font-size:clamp(2.2rem,7vw,5rem);margin:0;font-weight:700;letter-spacing:.01em;line-height:1.1;padding:0 1rem}
+#intro p{margin:1rem 0 0;color:var(--soft);font-size:1rem}
+.join-panel{display:flex;flex-wrap:wrap;justify-content:center;align-items:end;gap:.65rem;margin-top:1.5rem;padding:1rem;background:rgba(20,26,58,.55);border:1px solid var(--line);border-radius:18px;backdrop-filter:blur(8px);max-width:min(94vw,650px)}
+.join-panel label{display:flex;flex-direction:column;gap:.35rem;text-align:left;color:var(--soft);font-size:.85rem}
+.join-panel input{width:180px;max-width:38vw;padding:.7rem .8rem;border-radius:10px;border:1px solid var(--line);background:#111936;color:var(--ink);font:inherit;outline:none}
+.join-panel input:focus{border-color:var(--accent)}
+.join-panel button{padding:.75rem 1.25rem;border:1px solid var(--accent);border-radius:999px;background:#3b3154;color:#ffe4a9;font:inherit;font-weight:700;cursor:pointer}
+.join-panel button:hover{background:#51416e}
+#onlineStatus{color:#a9e7c1}
+@keyframes pulse{50%{opacity:.35}}
+#loader{display:none;z-index:19}
+#bar{width:min(320px,70vw);height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin-top:1rem}
+#bar i{display:block;height:100%;width:0;background:var(--accent)}
+#tools{position:fixed;top:0;left:0;right:0;display:none;gap:.5rem;justify-content:center;padding:calc(env(safe-area-inset-top,0px) + .7rem) .7rem .7rem;z-index:10}
+#tools button{font:inherit;font-weight:700;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:.55rem 1.1rem;cursor:pointer;backdrop-filter:blur(8px)}
+#tools button:hover,#tools button.on{border-color:var(--accent);color:var(--accent)}
+#tools button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#hud{position:fixed;left:0;right:0;bottom:0;display:none;flex-direction:column;align-items:center;gap:.4rem;padding:.8rem .8rem calc(env(safe-area-inset-bottom,0px) + .8rem);z-index:10;pointer-events:none;text-align:center}
+#hud span{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:.4rem .9rem;font-size:.95rem;backdrop-filter:blur(8px)}
+#timer{color:var(--accent);font-weight:700}
+#toast{position:fixed;top:4.5rem;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--accent);border-radius:12px;padding:.5rem 1rem;z-index:30;opacity:0;transition:opacity .3s;pointer-events:none;max-width:90vw;text-align:center}
+#shot{position:fixed;inset:0;z-index:25;display:none;align-items:center;justify-content:center;flex-direction:column;gap:1rem;background:rgba(10,12,30,.85)}
+#shot img{max-width:86vw;max-height:70vh;border-radius:12px;border:1px solid var(--line)}
+#shot div{display:flex;gap:.6rem}
+#shot button{font:inherit;font-weight:700;color:var(--ink);background:var(--panel);border:1px solid var(--accent);border-radius:999px;padding:.55rem 1.2rem;cursor:pointer}
+@media (prefers-reduced-motion:reduce){#intro p{animation:none}}
+</style>
+</head>
+<body>
+<div id="intro">
+  <h1>Ngủ bù thời gian thực</h1>
+  <div class="join-panel">
+    <label>Tên hiển thị<input id="playerName" maxlength="16" value="Khách" autocomplete="nickname"></label>
+    <label>Mã phòng<input id="roomCode" maxlength="24" value="phong-1" autocomplete="off"></label>
+    <button id="joinBtn" type="button">Vào phòng</button>
+  </div>
+  <p>Nhập cùng mã phòng để gặp bạn bè. Chia sẻ địa chỉ trang web và mã phòng cho người muốn tham gia.</p>
+</div>
+<div id="loader"><div>Đang kê giường…</div><div id="bar"><i></i></div></div>
+<div id="tools">
+  <button id="bMusic">♪ Phát nhạc</button>
+  <button id="bShot">Chụp ảnh</button>
+  <button id="bSave">Lưu về máy</button>
+</div>
+<div id="hud">
+  <span id="timer">Đã ngủ bù 00:00</span>
+  <span id="onlineStatus">Đang chuẩn bị kết nối…</span>
+  <span id="hint">W A S D di chuyển · kéo chuột trái để xoay · lăn chuột để zoom · click giường để leo lên · Shift để rời giường</span>
+</div>
+<div id="toast"></div>
+<div id="shot"><img alt="Ảnh chụp"><div><button id="sDl">Lưu về máy</button><button id="sClose">Đóng</button></div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const T = THREE, $ = id => document.getElementById(id);
+const COLS = 10, ROWS = 10, SIDE_COLS = 5, SX = 4.4, SZ = 5.2;
+const AISLE = 8, MARGIN = 6;
+const W = COLS * SX + AISLE + MARGIN * 2, D = ROWS * SZ + MARGIN * 2;
+let scene, camera, renderer, sun, player, limbs = {}, eyes = [], zzz = [];
+let bedGroups = [], bedBoxes = [];
+let state = 'walk', anim = null, cur = null, sleepTime = 0, ready = false;
+let socket = null, myId = null, playerName = 'Khách', roomCode = 'phong-1';
+let remotePlayers = new Map(), netTimer = null, isMoving = false;
+let yaw = 0, pitch = .55, dist = 7, faceAng = 0, walkPh = 0;
+const keys = {}, clock = new T.Clock(), camPos = new T.Vector3();
+
+/* ---------- Nhân vật ---------- */
+function stripeTex(c1, c2) {
+  const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+  const g = c.getContext('2d'); g.fillStyle = c1; g.fillRect(0, 0, 64, 64);
+  g.fillStyle = c2; for (let i = 0; i < 64; i += 16) g.fillRect(0, i, 64, 6);
+  const t = new T.CanvasTexture(c); t.wrapS = t.wrapT = T.RepeatWrapping; return t;
+}
+function makeChar(trackLocal = true) {
+  const g = new T.Group();
+  const ownLimbs = trackLocal ? limbs : {};
+  const ownEyes = trackLocal ? eyes : [];
+  const pj = new T.MeshStandardMaterial({ map: stripeTex('#7fb2ff', '#ffffff'), roughness: .8 });
+  const skin = new T.MeshStandardMaterial({ color: 0xffd9b8, roughness: .7 });
+  const mesh = (geo, mat, x, y, z, p) => { const o = new T.Mesh(geo, mat); o.position.set(x, y, z); o.castShadow = true; p.add(o); return o; };
+  const limb = (x, y, len, r, mat) => {
+    const p = new T.Group(); p.position.set(x, y, 0); g.add(p);
+    mesh(new T.CylinderGeometry(r, r * .92, len, 12), mat, 0, -len / 2, 0, p);
+    return p;
+  };
+  ownLimbs.legL = limb(-.16, .7, .7, .13, pj); ownLimbs.legR = limb(.16, .7, .7, .13, pj);
+  ownLimbs.armL = limb(-.37, 1.2, .6, .08, pj); ownLimbs.armR = limb(.37, 1.2, .6, .08, pj);
+  [ownLimbs.legL, ownLimbs.legR].forEach(l => mesh(new T.SphereGeometry(.14, 10, 8), skin, 0, -.72, .03, l));
+  [ownLimbs.armL, ownLimbs.armR].forEach(l => mesh(new T.SphereGeometry(.09, 10, 8), skin, 0, -.62, 0, l));
+  mesh(new T.CylinderGeometry(.27, .29, .6, 16), pj, 0, .95, 0, g);
+  mesh(new T.SphereGeometry(.29, 20, 16), skin, 0, 1.55, 0, g);
+  // Đã bỏ mũ ngủ và quả bông; giữ nguyên phần đầu và khuôn mặt nhân vật.
+  const em = new T.MeshBasicMaterial({ color: 0x222233 });
+  [-.1, .1].forEach(x => ownEyes.push(mesh(new T.SphereGeometry(.035, 8, 8), em, x, 1.58, .27, g)));
+  g.userData.limbs = ownLimbs;
+  return g;
+}
+
+function makeNameTag(name) {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 128;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = 'rgba(16,24,45,.88)'; ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(10, 10, 492, 108, 28); else ctx.rect(10, 10, 492, 108); ctx.fill();
+  ctx.strokeStyle = '#d6ad62'; ctx.lineWidth = 5; ctx.stroke();
+  ctx.fillStyle = '#fff3d3'; ctx.font = 'bold 46px Quicksand, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const label = String(name || 'Khách').slice(0, 16); ctx.fillText(label, 256, 66, 450);
+  const tex = new T.CanvasTexture(c);
+  const tag = new T.Sprite(new T.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+  tag.scale.set(2.2, .55, 1); tag.position.y = 2.85;
+  return tag;
+}
+
+function addRemotePlayer(data) {
+  if (!data || !data.id || data.id === myId) return;
+  let remote = remotePlayers.get(data.id);
+  if (!remote) {
+    const group = makeChar(false);
+    group.add(makeNameTag(data.name));
+    scene.add(group);
+    remote = { group, target: new T.Vector3(data.x || 0, data.y || 0, data.z || 0), targetRx: data.rx || 0, targetRy: data.ry || 0, moving: !!data.moving, phase: 0 };
+    remotePlayers.set(data.id, remote);
+  }
+  remote.target.set(Number(data.x) || 0, Number(data.y) || 0, Number(data.z) || 0);
+  remote.targetRx = Number(data.rx) || 0; remote.targetRy = Number(data.ry) || 0;
+  remote.moving = !!data.moving;
+}
+function removeRemotePlayer(id) {
+  const remote = remotePlayers.get(id); if (!remote) return;
+  scene.remove(remote.group);
+  remote.group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (Array.isArray(o.material)) o.material.forEach(m => m.dispose()); else o.material.dispose(); } });
+  remotePlayers.delete(id);
+}
+function connectOnline() {
+  const scheme = location.protocol === 'https:' ? 'wss://' : 'ws://';
+  const url = `${scheme}${location.host}/ws?name=${encodeURIComponent(playerName)}&room=${encodeURIComponent(roomCode)}`;
+  try { socket = new WebSocket(url); } catch (e) { $('onlineStatus').textContent = 'Không kết nối được server'; return; }
+  socket.addEventListener('open', () => { $('onlineStatus').textContent = 'Đã kết nối · phòng ' + roomCode; });
+  socket.addEventListener('message', event => {
+    let msg; try { msg = JSON.parse(event.data); } catch { return; }
+    if (msg.type === 'welcome') {
+      myId = msg.id;
+      if (msg.spawn) { player.position.set(msg.spawn.x || 0, 0, msg.spawn.z || 0); camPos.set(player.position.x, 5, player.position.z + 9); }
+      (msg.players || []).forEach(addRemotePlayer);
+      $('onlineStatus').textContent = `${msg.count || 1} người đang ở phòng · ${roomCode}`;
+    } else if (msg.type === 'join') {
+      addRemotePlayer(msg.player); $('onlineStatus').textContent = `${msg.count || remotePlayers.size + 1} người đang ở phòng · ${roomCode}`;
+    } else if (msg.type === 'state') addRemotePlayer(msg.player);
+    else if (msg.type === 'leave') {
+      removeRemotePlayer(msg.id); $('onlineStatus').textContent = `${msg.count || remotePlayers.size + 1} người đang ở phòng · ${roomCode}`;
+    }
+  });
+  socket.addEventListener('close', () => { $('onlineStatus').textContent = 'Mất kết nối server'; });
+  socket.addEventListener('error', () => { $('onlineStatus').textContent = 'Lỗi kết nối · kiểm tra server'; });
+  clearInterval(netTimer);
+  netTimer = setInterval(() => {
+    if (!socket || socket.readyState !== WebSocket.OPEN || !ready || !player) return;
+    socket.send(JSON.stringify({ type: 'state', state: {
+      x: player.position.x, y: player.position.y, z: player.position.z,
+      rx: player.rotation.x, ry: player.rotation.y,
+      pose: state, moving: isMoving
+    }}));
+  }, 70);
+}
+function updateRemotePlayers(dt) {
+  remotePlayers.forEach(remote => {
+    remote.group.position.lerp(remote.target, Math.min(1, dt * 12));
+    remote.group.rotation.x += (remote.targetRx - remote.group.rotation.x) * Math.min(1, dt * 12);
+    remote.group.rotation.y = lerpAng(remote.group.rotation.y, remote.targetRy, Math.min(1, dt * 12));
+    const l = remote.group.userData.limbs;
+    if (l) {
+      remote.phase += dt * 9;
+      const a = remote.moving ? Math.sin(remote.phase) * .8 : 0;
+      l.legL.rotation.x = a; l.legR.rotation.x = -a;
+      l.armL.rotation.x = -a * .8; l.armR.rotation.x = a * .8;
+    }
+  });
+}
+
+/* ---------- Giường ---------- */
+function makeBed(color, luxury = false) {
+  const g = new T.Group();
+  const wood = luxury ? 0x4b3026 : 0x9a7656;
+  const trim = luxury ? 0xd6ad62 : 0x6d8792;
+  const add = (w, h, d, c, x, y, z, mat = null) => {
+    const material = mat || new T.MeshStandardMaterial({ color: c, roughness: luxury ? .48 : .78, metalness: luxury ? .18 : .04 });
+    const o = new T.Mesh(new T.BoxGeometry(w, h, d), material);
+    o.position.set(x, y, z); o.castShadow = o.receiveShadow = true; g.add(o);
+    return o;
+  };
+  // Khung và nệm
+  add(2.35, .48, 3.55, wood, 0, .25, 0);
+  add(2.22, .22, 3.38, luxury ? 0xf4ead8 : 0xe8edf0, 0, .61, 0);
+  add(2.4, 1.45, .2, wood, 0, .95, -1.72);
+  add(1.8, .24, .68, luxury ? 0xfff5e7 : 0xffffff, 0, .82, -1.12);
+  add(2.12, .28, 1.95, color, 0, .84, .52);
+  // Viền kim loại / gỗ trang trí
+  add(2.42, .08, .12, trim, 0, 1.62, -1.72);
+  if (luxury) {
+    // Trụ góc và chi tiết đầu giường kiểu quý tộc
+    for (const x of [-1.08, 1.08]) {
+      for (const z of [-1.58, 1.58]) {
+        add(.13, 1.55, .13, trim, x, .82, z);
+        const cap = new T.Mesh(new T.SphereGeometry(.12, 10, 8),
+          new T.MeshStandardMaterial({ color: 0xf0cf82, metalness: .55, roughness: .3 }));
+        cap.position.set(x, 1.65, z); cap.castShadow = true; g.add(cap);
+      }
+    }
+    add(2.15, .09, .08, trim, 0, 1.32, -1.84);
+  } else {
+    // Chân giường gọn cho khu thường dân
+    for (const x of [-.98, .98]) for (const z of [-1.42, 1.42])
+      add(.16, .28, .16, wood, x, .14, z);
+  }
+  return g;
+}
+
+/* ---------- Dựng cảnh ---------- */
+async function init() {
+  renderer = new T.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.shadowMap.enabled = true;
+  document.body.prepend(renderer.domElement);
+  scene = new T.Scene(); scene.background = new T.Color(0x10182d); scene.fog = new T.Fog(0x10182d, 55, 125);
+  camera = new T.PerspectiveCamera(55, innerWidth / innerHeight, .1, 200);
+  scene.add(new T.HemisphereLight(0xc8d7ff, 0x70543d, 1.05));
+  sun = new T.DirectionalLight(0xffe2b8, 1.15); sun.position.set(8, 16, 6); sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  Object.assign(sun.shadow.camera, { left: -38, right: 38, top: 38, bottom: -38, near: 1, far: 70 });
+  scene.add(sun, sun.target);
+
+  // Sàn gỗ ấm áp, rộng và thoáng
+  const fc = document.createElement('canvas'); fc.width = 256; fc.height = 256;
+  const fg = fc.getContext('2d');
+  for (let i = 0; i < 8; i++) {
+    fg.fillStyle = `hsl(30,${32 + i % 3 * 4}%,${34 + (i * 7) % 8}%)`;
+    fg.fillRect(0, i * 32, 256, 30); fg.fillStyle = '#24170f'; fg.fillRect(0, i * 32 + 30, 256, 2);
+  }
+  const ft = new T.CanvasTexture(fc); ft.wrapS = ft.wrapT = T.RepeatWrapping; ft.repeat.set(W / 7, D / 7);
+  const floor = new T.Mesh(new T.PlaneGeometry(W, D), new T.MeshStandardMaterial({ map: ft, roughness: .82 }));
+  floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+
+  // Tường xanh đêm, chân tường và đường viền vàng
+  const wallMat = new T.MeshStandardMaterial({ color: 0x26304c, roughness: .88 });
+  const wallTrim = new T.MeshStandardMaterial({ color: 0xc39b58, metalness: .35, roughness: .45 });
+  [[W, 0, -D / 2, 0], [W, 0, D / 2, 0], [D, -W / 2, 0, Math.PI / 2], [D, W / 2, 0, Math.PI / 2]].forEach(([l, x, z, r]) => {
+    const w = new T.Mesh(new T.BoxGeometry(l, 8, .5), wallMat);
+    w.position.set(x, 4, z); w.rotation.y = r; w.castShadow = true; scene.add(w);
+    const rail = new T.Mesh(new T.BoxGeometry(l, .18, .58), wallTrim);
+    rail.position.set(x, .45, z); rail.rotation.y = r; scene.add(rail);
+  });
+
+  // Cột trang trí dọc hai bên và viền trần
+  const columnMat = new T.MeshStandardMaterial({ color: 0x9b805f, roughness: .55 });
+  for (let z = -D / 2 + 3; z <= D / 2 - 2; z += 10) {
+    for (const x of [-W / 2 + 1.1, W / 2 - 1.1]) {
+      const col = new T.Mesh(new T.BoxGeometry(.85, 7.4, .85), columnMat);
+      col.position.set(x, 3.7, z); col.castShadow = true; scene.add(col);
+      const base = new T.Mesh(new T.BoxGeometry(1.2, .35, 1.2), wallTrim);
+      base.position.set(x, .2, z); scene.add(base);
+      const top = new T.Mesh(new T.BoxGeometry(1.15, .3, 1.15), wallTrim);
+      top.position.set(x, 7.25, z); scene.add(top);
+    }
+  }
+
+  // Lối đi trung tâm phân tách hai khu
+  const aisle = new T.Mesh(new T.PlaneGeometry(AISLE - 1, D - 2),
+    new T.MeshStandardMaterial({ color: 0x75604b, roughness: .72 }));
+  aisle.rotation.x = -Math.PI / 2; aisle.position.y = .025; aisle.receiveShadow = true; scene.add(aisle);
+  const aisleLineMat = new T.MeshStandardMaterial({ color: 0xd5b978, metalness: .3, roughness: .4 });
+  for (const x of [-(AISLE / 2), AISLE / 2]) {
+    const line = new T.Mesh(new T.BoxGeometry(.09, .025, D - 2), aisleLineMat);
+    line.position.set(x, .04, 0); scene.add(line);
+  }
+
+  // Đèn chùm treo dọc trục trung tâm
+  const chandelierMat = new T.MeshStandardMaterial({ color: 0xd6b36d, metalness: .65, roughness: .28 });
+  for (let z = -D / 2 + 9; z <= D / 2 - 5; z += 15) {
+    const stem = new T.Mesh(new T.CylinderGeometry(.07, .07, 1.3, 10), chandelierMat);
+    stem.position.set(0, 6.7, z); scene.add(stem);
+    const ring = new T.Mesh(new T.TorusGeometry(.85, .07, 8, 24), chandelierMat);
+    ring.rotation.x = Math.PI / 2; ring.position.set(0, 6.1, z); scene.add(ring);
+    const lamp = new T.PointLight(0xffd89a, 1.15, 19);
+    lamp.position.set(0, 5.8, z); scene.add(lamp);
+    for (let a = 0; a < 6; a++) {
+      const ang = a * Math.PI / 3;
+      const bulb = new T.Mesh(new T.SphereGeometry(.13, 10, 8),
+        new T.MeshBasicMaterial({ color: 0xffe2a8 }));
+      bulb.position.set(Math.cos(ang) * .85, 6.1, z + Math.sin(ang) * .85); scene.add(bulb);
+    }
+  }
+
+  // Bảng tên hai khu
+  function makeSign(label, x, color) {
+    const c = document.createElement('canvas'); c.width = 512; c.height = 128;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#17213a'; ctx.fillRect(0, 0, 512, 128);
+    ctx.strokeStyle = '#d6b36d'; ctx.lineWidth = 8; ctx.strokeRect(8, 8, 496, 112);
+    ctx.fillStyle = color; ctx.font = 'bold 42px Quicksand, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(label, 256, 82);
+    const tex = new T.CanvasTexture(c);
+    const sign = new T.Mesh(new T.PlaneGeometry(7, 1.75),
+      new T.MeshBasicMaterial({ map: tex, transparent: true, side: T.DoubleSide }));
+    sign.position.set(x, 4.2, -D / 2 + .35); scene.add(sign);
+  }
+  makeSign('KHU QUÝ TỘC', -W / 4, '#f4d58a');
+  makeSign('KHU THƯỜNG DÂN', W / 4, '#c8d9ed');
+
+  player = makeChar(); player.position.set(0, 0, 0); scene.add(player);
+  yaw = 0;
+  // chữ Z bay
+  const zc = document.createElement('canvas'); zc.width = zc.height = 64;
+  const zg = zc.getContext('2d'); zg.font = '700 52px Quicksand,sans-serif'; zg.fillStyle = '#ffd27a'; zg.textAlign = 'center'; zg.fillText('Z', 32, 52);
+  const zt = new T.CanvasTexture(zc);
+  for (let i = 0; i < 3; i++) { const s = new T.Sprite(new T.SpriteMaterial({ map: zt, transparent: true })); s.visible = false; scene.add(s); zzz.push(s); }
+
+  // 100 giường, dựng từng hàng để hiện thanh tiến trình
+  const noblePal = [0x7e263e, 0x263c68, 0x6b3c70, 0x8b5b32];
+  const commonPal = [0x8fb7c5, 0x9dbb9b, 0xc4ad88, 0x9da8c4];
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const noble = c < SIDE_COLS;
+      const localCol = noble ? c : c - SIDE_COLS;
+      const centerX = noble ? -(AISLE / 2 + SIDE_COLS * SX / 2) : (AISLE / 2 + SIDE_COLS * SX / 2);
+      const x = centerX + (localCol - (SIDE_COLS - 1) / 2) * SX;
+      const z = (r - (ROWS - 1) / 2) * SZ;
+      const pal = noble ? noblePal : commonPal;
+      const b = makeBed(pal[(r + localCol) % pal.length], noble);
+      b.position.set(x, 0, z);
+      b.userData = { bed: bedGroups.length, x, z, c: localCol, side: noble ? 'noble' : 'common' };
+      scene.add(b); bedGroups.push(b);
+      bedBoxes.push({ x, z });
+    }
+    document.querySelector('#bar i').style.width = (r + 1) * 10 + '%';
+    await new Promise(requestAnimationFrame);
+  }
+  ready = true;
+}
+
+/* ---------- Điều khiển ---------- */
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code.startsWith('Shift')) leave();
+  if (e.code.startsWith('Key') || e.code.startsWith('Arrow')) e.preventDefault();
+});
+addEventListener('keyup', e => keys[e.code] = false);
+let down = null;
+addEventListener('pointerdown', e => { if (e.button === 0 && ready && e.target === renderer.domElement) down = { x: e.clientX, y: e.clientY, moved: 0 }; });
+addEventListener('pointermove', e => {
+  if (!down) return;
+  const dx = e.clientX - down.x, dy = e.clientY - down.y;
+  down.moved += Math.abs(dx) + Math.abs(dy); down.x = e.clientX; down.y = e.clientY;
+  yaw -= dx * .005; pitch = Math.min(1.2, Math.max(.12, pitch + dy * .004));
+});
+addEventListener('pointerup', e => {
+  if (down && down.moved < 6) pick(e.clientX, e.clientY);
+  down = null;
+});
+addEventListener('wheel', e => { dist = Math.min(14, Math.max(4, dist + e.deltaY * .005)); });
+addEventListener('resize', () => { if (!renderer) return; camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+function pick(px, py) {
+  if (state === 'climb') return;
+  const ray = new T.Raycaster();
+  ray.setFromCamera(new T.Vector2(px / innerWidth * 2 - 1, -(py / innerHeight) * 2 + 1), camera);
+  const hit = ray.intersectObjects(bedGroups, true)[0];
+  if (!hit) return;
+  let o = hit.object; while (o && !(o.userData && o.userData.bed !== undefined)) o = o.parent;
+  if (o) climb(o.userData);
+}
+const lerpAng = (a, b, t) => { let d = ((b - a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI; return a + d * t; };
+function climb(bed) {
+  if (cur === bed && state === 'sleep') return;
+  const from = player.position.clone(), to = new T.Vector3(bed.x, .95, bed.z + .3);
+  const wasSleep = state === 'sleep';
+  anim = { t: 0, dur: .7 + from.distanceTo(to) * .035, from, to, rx0: player.rotation.x, rx1: -Math.PI / 2, ry0: player.rotation.y, ry1: 0, h: 1 + from.distanceTo(to) * .06 };
+  state = 'climb'; cur = bed; setZ(false);
+  $('hint').textContent = 'Đang ngủ trên giường số ' + (bed.bed + 1) + ' · Shift để dậy';
+}
+function leave() {
+  if (state !== 'sleep') return;
+  const side = cur.side === 'noble' ? 1 : -1;
+  const to = new T.Vector3(cur.x + side * 1.7, 0, cur.z + .2);
+  anim = { t: 0, dur: .8, from: player.position.clone(), to, rx0: -Math.PI / 2, rx1: 0, ry0: 0, ry1: side * Math.PI / 2, h: 1.2, leaving: true };
+  state = 'climb'; setZ(false);
+  $('hint').textContent = 'W A S D di chuyển · kéo chuột trái để xoay · lăn chuột để zoom · click giường để leo lên · Shift để rời giường';
+}
+function setZ(v) { zzz.forEach(z => z.visible = v); eyes.forEach(e => e.scale.y = v ? .15 : 1); }
+
+/* ---------- Vòng lặp ---------- */
+function update(dt) {
+  if (state === 'walk') {
+    let f = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0), r = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
+    const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+    let dx = fx * f + (-fz) * r, dz = fz * f + fx * r;
+    const len = Math.hypot(dx, dz);
+    isMoving = len > 0;
+    if (len > 0) {
+      dx /= len; dz /= len;
+      const sp = 4.2 * dt, p = player.position;
+      p.x += dx * sp; p.z += dz * sp;
+      faceAng = lerpAng(faceAng, Math.atan2(dx, dz), Math.min(1, dt * 12));
+      walkPh += dt * 9;
+    } else walkPh *= .85;
+    const s = Math.sin(walkPh) * (len > 0 ? .8 : .05);
+    limbs.legL.rotation.x = s; limbs.legR.rotation.x = -s; limbs.armL.rotation.x = -s * .8; limbs.armR.rotation.x = s * .8;
+    const p = player.position;
+    bedBoxes.forEach(b => { // va chạm với giường
+      const ox = p.x - b.x, oz = p.z - b.z, hx = 1.05 + .35, hz = 1.65 + .35;
+      if (Math.abs(ox) < hx && Math.abs(oz) < hz) {
+        if (hx - Math.abs(ox) < hz - Math.abs(oz)) p.x = b.x + Math.sign(ox || 1) * hx; else p.z = b.z + Math.sign(oz || 1) * hz;
+      }
+    });
+    p.x = Math.max(-W / 2 + .8, Math.min(W / 2 - .8, p.x)); p.z = Math.max(-D / 2 + .8, Math.min(D / 2 - .8, p.z));
+    player.rotation.set(0, faceAng, 0); player.position.y = 0;
+  } else if (state === 'climb') {
+    isMoving = false;
+    anim.t += dt / anim.dur; const t = Math.min(1, anim.t), e = t * t * (3 - 2 * t);
+    player.position.lerpVectors(anim.from, anim.to, e); player.position.y += Math.sin(Math.PI * t) * anim.h;
+    player.rotation.set(anim.rx0 + (anim.rx1 - anim.rx0) * e, lerpAng(anim.ry0, anim.ry1, e), 0);
+    Object.values(limbs).forEach(l => { l.rotation.x *= .8; });
+    if (t >= 1) {
+      if (anim.leaving) { state = 'walk'; faceAng = anim.ry1; cur = null; }
+      else { state = 'sleep'; setZ(true); }
+    }
+  } else if (state === 'sleep') {
+    isMoving = false;
+    sleepTime += dt;
+    const s = Math.floor(sleepTime);
+    $('timer').textContent = 'Đã ngủ bù ' + String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+    const now = clock.elapsedTime;
+    zzz.forEach((z, i) => {
+      const k = (now * .4 + i / 3) % 1;
+      z.position.set(player.position.x + .3 + k * .6, 1.9 + k * 1.2, player.position.z - 1.1);
+      z.scale.setScalar(.3 + k * .5); z.material.opacity = 1 - k;
+    });
+  }
+  updateRemotePlayers(dt);
+  // camera đi theo
+  const tgt = player.position.clone(); tgt.y = state === 'walk' ? 1.2 : 1;
+  const want = new T.Vector3(tgt.x + Math.sin(yaw) * Math.cos(pitch) * dist, tgt.y + Math.sin(pitch) * dist, tgt.z + Math.cos(yaw) * Math.cos(pitch) * dist);
+  camPos.lerp(want, Math.min(1, dt * 6)); camera.position.copy(camPos); camera.lookAt(tgt);
+  sun.position.set(tgt.x + 8, 16, tgt.z + 6); sun.target.position.copy(tgt);
+}
+function loop() {
+  requestAnimationFrame(loop);
+  const dt = Math.min(clock.getDelta(), .05);
+  if (ready) update(dt);
+  if (renderer) renderer.render(scene, camera);
+}
+
+/* ---------- Nhạc ru ngủ (WebAudio, không cần file) ---------- */
+let ac, mg, timer, musicOn = false;
+const chords = [[130.81, 196, 261.63, 329.63], [110, 164.81, 220, 329.63], [87.31, 130.81, 174.61, 261.63], [98, 146.83, 196, 293.66]];
+const scale = [261.63, 293.66, 329.63, 392, 440];
+function note(f, t, d, v) {
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = 'sine'; o.frequency.value = f;
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + .4); g.gain.exponentialRampToValueAtTime(.0001, t + d);
+  o.connect(g); g.connect(mg); o.start(t); o.stop(t + d + .1);
+}
+function musicOnFn() {
+  ac = ac || new (window.AudioContext || window.webkitAudioContext)(); ac.resume();
+  if (!mg) { mg = ac.createGain(); mg.gain.value = .3; const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1400; mg.connect(f); f.connect(ac.destination); }
+  let step = 0;
+  const tick = () => {
+    const t = ac.currentTime + .05;
+    if (step % 8 === 0) chords[(step / 8) % 4].forEach(f => note(f, t, 7, .1));
+    if (Math.random() < .7) note(scale[Math.random() * 5 | 0] * (Math.random() < .3 ? 2 : 1), t, 3, .08);
+    step++;
+  };
+  tick(); timer = setInterval(tick, 900);
+  musicOn = true; $('bMusic').textContent = '♪ Tắt nhạc'; $('bMusic').classList.add('on');
+}
+function musicOff() {
+  clearInterval(timer); musicOn = false;
+  $('bMusic').textContent = '♪ Phát nhạc'; $('bMusic').classList.remove('on');
+}
+$('bMusic').onclick = () => musicOn ? musicOff() : musicOnFn();
+
+/* ---------- Chụp ảnh & lưu ---------- */
+let lastShot = null;
+const toast = m => { const t = $('toast'); t.textContent = m; t.style.opacity = 1; clearTimeout(toast.h); toast.h = setTimeout(() => t.style.opacity = 0, 3200); };
+function shoot() {
+  renderer.render(scene, camera);
+  lastShot = renderer.domElement.toDataURL('image/png');
+  $('shot').querySelector('img').src = lastShot; $('shot').style.display = 'flex';
+}
+function download() {
+  if (!lastShot) shoot();
+  const a = document.createElement('a'); a.href = lastShot; a.download = 'ngu-bu-' + Date.now() + '.png';
+  document.body.appendChild(a); a.click(); a.remove();
+  toast('Đã lưu ảnh. Nếu trình duyệt chặn tải, chuột phải (hoặc nhấn giữ) vào ảnh để lưu.');
+}
+$('bShot').onclick = shoot;
+$('bSave').onclick = () => { shoot(); download(); };
+$('sDl').onclick = download;
+$('sClose').onclick = () => $('shot').style.display = 'none';
+
+/* ---------- Vào web ---------- */
+const roomFromUrl = new URLSearchParams(location.search).get('room');
+if (roomFromUrl) $('roomCode').value = roomFromUrl.slice(0, 24);
+$('joinBtn').addEventListener('click', async () => {
+  playerName = ($('playerName').value.trim() || 'Khách').slice(0, 16);
+  roomCode = ($('roomCode').value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '') || 'phong-1').slice(0, 24);
+  $('intro').style.display = 'none'; $('loader').style.display = 'flex';
+  musicOnFn();
+  loop();
+  await init();
+  $('loader').style.display = 'none'; $('tools').style.display = 'flex'; $('hud').style.display = 'flex';
+  camPos.set(0, 5, 9);
+  connectOnline();
+});
+</script>
+</body>
+</html>
